@@ -14,10 +14,10 @@ TARGET_DEVICES = [
 # API_URL = "http://localhost:3000/rssi"
 # API_URL = "https://tracker-backend-1djh.onrender.com/rssi"
 
-# API_URL = "http://localhost/tracker_php/api/rssi.php"
+API_URL = "http://localhost/tracker_php/api/rssi.php"
 
 
-API_URL = "http://localhost:8080/api/rssi.php"
+# API_URL = "http://localhost:8080/api/rssi.php"
 
 
 

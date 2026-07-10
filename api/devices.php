@@ -31,7 +31,19 @@ $trackers = [];
 
 while($row = mysqli_fetch_assoc($result))
 {
-    $trackers[] = $row;
+    $ONLINE_TIMEOUT = 20;   // seconds
+
+    $lastUpdate = strtotime($row["updated_at"]);
+
+    $ONLINE_TIMEOUT = 20;
+
+    $lastUpdate = strtotime($row["updated_at"]);
+    $currentTime = time();
+    $row["online"] = (($currentTime - $lastUpdate) <= $ONLINE_TIMEOUT);   
+
+
+$trackers[] = $row;
+
 }
 
 echo json_encode([

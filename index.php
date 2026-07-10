@@ -11,8 +11,19 @@
 
 <script>
 
-// const API_URL ="http://localhost/api/devices.php";
-const API_URL ="/api/devices.php";
+// const API_URL ="http://localhost/tracker_php/api/devices.php";
+// const API_URL ="/api/devices.php";
+
+// auto update url
+
+const BASE_URL =
+window.location.pathname.includes("/tracker_php/")
+    ? "/tracker_php"
+    : "";
+
+const API_URL = `${BASE_URL}/api/devices.php`;
+
+
 
 async function loadTrackers()
 {
@@ -41,18 +52,21 @@ async function loadTrackers()
 
             </td>
 
-            <td>
-
-                ${tracker.exit_time
-                    ? formatTime(tracker.exit_time)
-                    : "<span class='text-success'>Current</span>"}
-
-            </td>
+          <!-- <td>${tracker.exit_time ? formatTime(tracker.exit_time) : "<span class='text-success'>Current</span>"}
+                </td> 
+            -->
+            
 
             <td>
 
-                ${tracker.status}
-
+                ${
+                tracker.online?
+                "<span class='text-success'>🟢 Online</span>"
+                :
+                `<span class='text-danger'>
+                🔴 Last Seen: ${formatTime(tracker.updated_at)}
+                </span>`
+                }
             </td>
 
             <td>
@@ -78,8 +92,8 @@ function formatTime(time)
     if(!time)
         return "-";
 
-    return new Date(time)
-        .toLocaleString();
+    return new Date(time.replace(" ", "T"))
+        .toLocaleString("en-IN");
 }
 
 loadTrackers();
@@ -116,7 +130,7 @@ setInterval(
 
                 <th>Entry Time</th>
 
-                <th>Exit Time</th>
+                <!-- <th>Exit Time</th> -->
 
                 <th>Status</th>
 

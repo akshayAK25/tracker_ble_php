@@ -54,8 +54,20 @@ new URLSearchParams(window.location.search)
 document.getElementById("title").innerHTML =
 `${tagId} History`;
 
-// const API_URL =`http://localhost/api/history.php?tagId=${tagId}`;
-const API_URL =`/api/history.php?tagId=${tagId}`;
+// const API_URL =`http://localhost/tracker_php/api/history.php?tagId=${tagId}`;
+// const API_URL =`/api/history.php?tagId=${tagId}`;
+
+// auto update url
+
+const BASE_URL =
+window.location.pathname.includes("/tracker_php/")
+    ? "/tracker_php"
+    : "";
+
+const API_URL =
+`${BASE_URL}/api/history.php?tagId=${tagId}`;
+
+
 
 async function loadHistory()
 {

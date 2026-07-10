@@ -18,6 +18,9 @@ $conn = mysqli_connect(
     $database
 );
 
+date_default_timezone_set("Asia/Kolkata");
+mysqli_query($conn, "SET time_zone = '+05:30'");
+
 if (!$conn) {
 
     die(

@@ -50,6 +50,9 @@ $sql = "SELECT device_name FROM device_mapping WHERE tag_id = ?";
 
 $stmt = mysqli_prepare($conn,$sql);
 
+date_default_timezone_set("Asia/Kolkata");
+$currentTime = date("Y-m-d H:i:s");
+
 mysqli_stmt_bind_param(
     $stmt,
     "s",
@@ -196,7 +199,7 @@ if(!$currentTracker)
         $location,
         $receiver,
         $rssi,
-        $status
+        $status,
     );
 
     mysqli_stmt_execute($stmt);
@@ -316,23 +319,28 @@ else
                 receiver = ?,
                 best_rssi = ?,
                 status = ?,
-                updated_at = NOW()
+                updated_at = ?
             WHERE tag_id = ?";
 
     $stmt = mysqli_prepare($conn,$sql);
 
-    mysqli_stmt_bind_param(
+date_default_timezone_set("Asia/Kolkata");
+$currentTime = date("Y-m-d H:i:s");
+    
+mysqli_stmt_bind_param(
         $stmt,
-        "ssiss",
+        "ssisss",
         $location,
         $receiver,
         $rssi,
         $status,
-        $tagId
+        $currentTime,
+        $tagId,
+
     );
 
     mysqli_stmt_execute($stmt);
-
+    echo mysqli_affected_rows($conn);
     echo "Tracker Updated";
 }
 
