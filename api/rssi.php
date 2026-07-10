@@ -348,34 +348,35 @@ else
         // Exit = NULL
         // -----------------------------------------------
 
-        $sql = "INSERT INTO tracker_history
-        (
-            tag_id,
-            device_name,
-            location,
-            receiver,
-            entry_time,
-            exit_time
-        )
-        VALUES
-        (
-            ?,?,?,?,NOW(),NULL
-        )";
+     $sql = "INSERT INTO tracker_history
+(
+    tag_id,
+    device_name,
+    location,
+    receiver,
+    entry_time,
+    exit_time
+)
+VALUES
+(
+    ?,?,?,?,?,NULL
+)";
 
-        $stmt = mysqli_prepare($conn,$sql);
+$stmt = mysqli_prepare($conn,$sql);
 
-        mysqli_stmt_bind_param(
-            $stmt,
-            "ssss",
-            $tagId,
-            $deviceName,
-            $location,
-            $receiver
-        );
+mysqli_stmt_bind_param(
+    $stmt,
+    "sssss",
+    $tagId,
+    $deviceName,
+    $location,
+    $receiver,
+    $currentTime
+);
 
-        mysqli_stmt_execute($stmt);
+mysqli_stmt_execute($stmt);
     }
-
+    
     // ======================================================
     // ALWAYS UPDATE CURRENT STATUS
     // Whether location changed or not
