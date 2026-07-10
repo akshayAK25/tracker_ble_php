@@ -1,18 +1,17 @@
 <?php
-
 include "../config/db.php";
 
 function getSignalStatus($rssi)
 {
     if($rssi >= -50) return "Very Near";
-
+    
     if($rssi >= -65) return "Near";
-
+    
     if($rssi >= -80) return "Medium";
-
+    
     return "Far";
-}
-
+    }
+    
 header("Content-Type: application/json");
 
 if($_SERVER["REQUEST_METHOD"] != "POST")
@@ -253,14 +252,14 @@ if(!$currentTracker)
     )
     VALUES
     (
-        ?,?,?,?,?,?,NOW()
+        ?,?,?,?,?,?,?
     )";
 
     $stmt = mysqli_prepare($conn,$sql);
 
     mysqli_stmt_bind_param(
         $stmt,
-        "ssssis",
+        "ssssiss",
         $tagId,
         $deviceName,
         $location,
@@ -288,18 +287,19 @@ if(!$currentTracker)
     )
     VALUES
     (
-        ?,?,?,?,NOW(),NULL
+        ?,?,?,?,?,NULL
     )";
 
     $stmt = mysqli_prepare($conn,$sql);
 
     mysqli_stmt_bind_param(
         $stmt,
-        "ssss",
+        "sssss",
         $tagId,
         $deviceName,
         $location,
-        $receiver
+        $receiver,
+        $currentTime
     );
 
     mysqli_stmt_execute($stmt);
@@ -327,17 +327,18 @@ else
         // Set exit_time for the current location
 
         $sql = "UPDATE tracker_history
-                SET exit_time = NOW()
+                SET exit_time = ?
                 WHERE tag_id = ?
                 AND exit_time IS NULL";
 
         $stmt = mysqli_prepare($conn,$sql);
 
         mysqli_stmt_bind_param(
-            $stmt,
-            "s",
-            $tagId
-        );
+                $stmt,
+                "ss",
+                $currentTime,
+                $tagId
+                );
 
         mysqli_stmt_execute($stmt);
 
