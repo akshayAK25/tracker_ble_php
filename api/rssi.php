@@ -42,6 +42,73 @@ $tagId = strtoupper(trim($data["device"]));
 $receiver = strtoupper(trim($data["receiver"]));
 $rssi = (int)$data["rssi"];
 
+// ======================================
+// SAVE RSSI FROM THIS RECEIVER
+// ======================================
+
+date_default_timezone_set("Asia/Kolkata");
+$currentTime = date("Y-m-d H:i:s");
+
+$sql = "INSERT INTO tracker_readings
+(tag_id, receiver, rssi, updated_at)
+VALUES(?,?,?,?)
+ON DUPLICATE KEY UPDATE
+rssi = VALUES(rssi),
+updated_at = VALUES(updated_at)";
+
+$stmt = mysqli_prepare($conn, $sql);
+
+mysqli_stmt_bind_param(
+    $stmt,
+    "ssis",
+    $tagId,
+    $receiver,
+    $rssi,
+    $currentTime
+);
+
+mysqli_stmt_execute($stmt);
+
+// ======================================
+// FIND STRONGEST RECEIVER
+// ======================================
+
+$sql = "SELECT receiver, rssi
+FROM tracker_readings
+WHERE tag_id = ?
+ORDER BY rssi DESC
+LIMIT 1";
+
+$stmt = mysqli_prepare($conn,$sql);
+
+mysqli_stmt_bind_param(
+$stmt,
+"s",
+$tagId
+);
+
+mysqli_stmt_execute($stmt);
+
+$result = mysqli_stmt_get_result($stmt);
+
+$bestReading = mysqli_fetch_assoc($result);
+
+// var_dump($bestReading);
+// exit();
+
+if(!$bestReading)
+{
+    echo json_encode([
+        "success"=>false,
+        "message"=>"No RSSI readings found"
+    ]);
+    exit();
+}
+
+
+// Replace current values
+$receiver = $bestReading["receiver"];
+$rssi = $bestReading["rssi"];
 
 // ------------------------------------------------
 
