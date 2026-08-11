@@ -1,5 +1,6 @@
 <?php
 include "../config/db.php";
+include "../includes/badge_functions.php";
 
 function getSignalStatus($rssi)
 {
@@ -40,6 +41,21 @@ if(!$data)
 $tagId = strtoupper(trim($data["device"]));
 $receiver = strtoupper(trim($data["receiver"]));
 $rssi = (int)$data["rssi"];
+
+$asset = getDisplayNameForBadge($conn, $tagId);
+
+if(!$asset)
+{
+    echo json_encode([
+        "success"=>false,
+        "message"=>"Unknown Badge"
+    ]);
+
+    exit();
+}
+
+$assetTagNumber = $asset["asset_tag_number"];
+$deviceName = $asset["device_name"];
 
 // ======================================
 // SAVE RSSI FROM THIS RECEIVER
@@ -112,46 +128,19 @@ $rssi = $bestReading["rssi"];
 // ------------------------------------------------
 
 
-$sql = "SELECT device_name FROM device_mapping WHERE tag_id = ?";
-
-$stmt = mysqli_prepare($conn,$sql);
-
 date_default_timezone_set("Asia/Kolkata");
 $currentTime = date("Y-m-d H:i:s");
-
-mysqli_stmt_bind_param(
-    $stmt,
-    "s",
-    $tagId
-);
-
-mysqli_stmt_execute($stmt);
-
-$result =
-mysqli_stmt_get_result($stmt);
-
-$device =
-mysqli_fetch_assoc($result);
-
-if(!$device)
-{
-    echo json_encode([
-        "success"=>false,
-        "message"=>"Unknown Device"
-    ]);
-
-    exit();
-}
-
-$deviceName =
-$device["device_name"];
 
 // ------------------------------------------------
 
 $sql =
-"SELECT location
-FROM antenna_mapping
-WHERE antenna_id = ?";
+"SELECT
+    am.location_id,
+    CONCAT_WS(' - ', l.section_department, l.room) AS location
+FROM antenna_mapping am
+LEFT JOIN locations l
+    ON am.location_id = l.location_id
+WHERE am.antenna_id = ?";
 
 $stmt =
 mysqli_prepare(
@@ -193,6 +182,8 @@ $antenna["location"];
 echo json_encode([
 
     "tagId"=>$tagId,
+
+    "assetTagNumber"=>$assetTagNumber,
 
     "deviceName"=>$deviceName,
 
@@ -250,23 +241,24 @@ if(!$currentTracker)
         status,
         updated_at
     )
-    VALUES
-    (
-        ?,?,?,?,?,?,?
-    )";
+   VALUES
+(
+    ?,?,?,?,?,?,?
+)";
 
     $stmt = mysqli_prepare($conn,$sql);
 
     mysqli_stmt_bind_param(
-        $stmt,
-        "ssssiss",
-        $tagId,
-        $deviceName,
-        $location,
-        $receiver,
-        $rssi,
-        $status,
-    );
+    $stmt,
+    "ssssiss",
+    $tagId,
+    $deviceName,
+    $location,
+    $receiver,
+    $rssi,
+    $status,
+    $currentTime
+);
 
     mysqli_stmt_execute($stmt);
 
@@ -316,12 +308,13 @@ else
     $status = getSignalStatus($rssi);
 
     $oldLocation = $currentTracker["current_location"];
-
+    $oldStatus = $currentTracker["status"];
     // ------------------------------------------------------
     // IF LOCATION CHANGED
     // ------------------------------------------------------
 
-    if($oldLocation != $location)
+    // if($oldLocation != $location)
+    if($oldLocation != $location || $oldStatus == "Offline")
     {
         // Close previous history record
         // Set exit_time for the current location
@@ -393,9 +386,7 @@ mysqli_stmt_execute($stmt);
 
     $stmt = mysqli_prepare($conn,$sql);
 
-date_default_timezone_set("Asia/Kolkata");
-$currentTime = date("Y-m-d H:i:s");
-    
+
 mysqli_stmt_bind_param(
         $stmt,
         "ssisss",

@@ -27,47 +27,53 @@ const API_URL = `${BASE_URL}/api/devices.php`;
 
 async function loadTrackers()
 {
-    const res = await fetch(API_URL);
+    const tbody = document.getElementById("trackers");
 
-    const json = await res.json();
+    if(!tbody)
+    {
+        console.error("Trackers table not found");
+        return;
+    }
 
-    const tbody =
-    document.getElementById("trackers");
+    try
+    {
+        const res = await fetch(API_URL);
+        const json = await res.json();
 
-    tbody.innerHTML = "";
+        tbody.innerHTML = "";
 
-    json.data.forEach(tracker=>{
+        if(!json.success)
+        {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-center text-danger">
+                        ${json.message || "Unable to load trackers"}
+                    </td>
+                </tr>
+            `;
+            return;
+        }
 
-        tbody.innerHTML += `
+        json.data.forEach(tracker=>{
+
+            const lastSeenTime = tracker.last_seen_time || tracker.entry_time || tracker.updated_at;
+            const statusHtml = tracker.online
+                ? "<span class='text-success'>🟢 Online</span>"
+                : "<span class='text-danger'>🔴 Offline</span>";
+
+            tbody.innerHTML += `
 
         <tr>
 
-            <td>${tracker.device_name}</td>
+            <td>${tracker.asset_name || tracker.device_name || "-"}</td>
 
-            <td>${tracker.current_location}</td>
+            <td>${tracker.asset_tag_no || tracker.asset_tag_number || "-"}</td>
 
-            <td>
+            <td>${tracker.last_seen_location || tracker.current_location || "-"}</td>
 
-                ${formatTime(tracker.entry_time)}
+            <td>${formatTime(lastSeenTime)}</td>
 
-            </td>
-
-          <!-- <td>${tracker.exit_time ? formatTime(tracker.exit_time) : "<span class='text-success'>Current</span>"}
-                </td> 
-            -->
-            
-
-            <td>
-
-                ${
-                tracker.online?
-                "<span class='text-success'>🟢 Online</span>"
-                :
-                `<span class='text-danger'>
-                🔴 Last Seen: ${formatTime(tracker.updated_at)}
-                </span>`
-                }
-            </td>
+            <td>${statusHtml}</td>
 
             <td>
 
@@ -84,7 +90,19 @@ async function loadTrackers()
         </tr>
 
         `;
-    });
+        });
+    }
+    catch(err)
+    {
+        console.error(err);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center text-danger">
+                    Unable to load trackers
+                </td>
+            </tr>
+        `;
+    }
 }
 
 function formatTime(time)
@@ -96,12 +114,14 @@ function formatTime(time)
         .toLocaleString("en-IN");
 }
 
-loadTrackers();
+document.addEventListener("DOMContentLoaded", () => {
+    loadTrackers();
 
-setInterval(
-    loadTrackers,
-    2000
-);
+    setInterval(
+        loadTrackers,
+        2000
+    );
+});
 
 </script>
 
@@ -124,17 +144,17 @@ setInterval(
 
             <tr>
 
-                <th>Asset</th>
+                <th>Asset Name</th>
 
-                <th>Location</th>
+                <th>Asset Tag No</th>
 
-                <th>Entry Time</th>
+                <th>Last Seen Location</th>
 
-                <!-- <th>Exit Time</th> -->
+                <th>Last Seen Time</th>
 
                 <th>Status</th>
 
-                <th></th>
+                <th>History</th>
 
             </tr>
 

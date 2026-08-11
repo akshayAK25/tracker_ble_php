@@ -33,20 +33,19 @@ $antennaId = strtoupper(
     trim($data["antennaId"])
 );
 
-$location = trim(
-    $data["location"]
+$locationId = strtoupper(
+    trim($data["locationId"] ?? "")
 );
 
 $sql =
-
 "INSERT INTO antenna_mapping
-(antenna_id, location)
+(antenna_id, location_id)
 
 VALUES (?,?)
 
 ON DUPLICATE KEY UPDATE
 
-location = VALUES(location)";
+location_id = VALUES(location_id)";
 
 $stmt = mysqli_prepare(
     $conn,
@@ -57,7 +56,7 @@ mysqli_stmt_bind_param(
     $stmt,
     "ss",
     $antennaId,
-    $location
+    $locationId
 );
 
 mysqli_stmt_execute($stmt);

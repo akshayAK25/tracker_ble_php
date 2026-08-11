@@ -1,35 +1,47 @@
 <?php
-
-// $host = "localhost";
-// $user = "root";
-// $password = "ak25082003?";
-// $database = "tracker";
+mysqli_report(MYSQLI_REPORT_OFF);
 
 
-$host = "sql12.freesqldatabase.com";
-$user = "sql12832584";
-$password = "R6HEDR46km";
-$database = "sql12832584";
+// avian --------------------------------------------------------
 
-$conn = mysqli_connect(
+$host = "ak-mysql-25-akshaypanaganti9395-9c17.i.aivencloud.com";
+$user = "avnadmin";
+$password = getenv("DB_PASSWORD");
+$database = "defaultdb";
+$port = 15642;
+
+$conn = mysqli_init();
+
+
+
+mysqli_ssl_set(
+    $conn,
+    NULL,
+    NULL,
+    // "C:/xampp/htdocs/tracker_php/certs/ca.pem",
+    "/var/www/html/certs/ca.pem",
+    NULL,
+    NULL
+);
+
+$connected = @mysqli_real_connect(
+    $conn,
     $host,
     $user,
     $password,
-    $database
+    $database,
+    $port,
+    NULL,
+    MYSQLI_CLIENT_SSL
 );
+
+if (!$connected) {
+    die("Connection Failed: " . mysqli_connect_error());
+}
 
 date_default_timezone_set("Asia/Kolkata");
 mysqli_query($conn, "SET time_zone = '+05:30'");
 
-if (!$conn) {
 
-    die(
-        "Connection Failed : "
-        . mysqli_connect_error()
-    );
-
-}
-
-// echo "Database Connected";
 
 ?>

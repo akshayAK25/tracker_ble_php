@@ -19,8 +19,8 @@ if(!$data){
     exit();
 }
 
-$tagId = strtoupper(
-    trim($data["tagId"])
+$assetTagNumber = strtoupper(
+    trim($data["assetTagNumber"] ?? $data["tagId"])
 );
 
 $deviceName = trim(
@@ -30,7 +30,7 @@ $deviceName = trim(
 $sql =
 
 "INSERT INTO device_mapping
-(tag_id,device_name)
+(asset_tag_number,device_name)
 
 VALUES (?,?)
 
@@ -49,7 +49,7 @@ mysqli_stmt_bind_param(
 
     "ss",
 
-    $tagId,
+    $assetTagNumber,
 
     $deviceName
 
