@@ -91,6 +91,7 @@ mysqli_stmt_execute($stmt);
 $sql = "SELECT receiver, rssi
 FROM tracker_readings
 WHERE tag_id = ?
+AND updated_at >= DATE_SUB(NOW(), INTERVAL 20 SECOND)
 ORDER BY rssi DESC
 LIMIT 1";
 

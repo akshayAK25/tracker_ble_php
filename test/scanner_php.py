@@ -115,7 +115,9 @@ TARGET_MACS = [
     "ea:26:73:f0:00:01",
 ]
 
-API_URL = "http://localhost:8080/api/rssi.php"
+# API_URL = "http://localhost:8080/api/rssi.php"
+
+API_URL = "https://tracker-ble-php.onrender.com/api/rssi.php"
 
 RECEIVER_NAME = "A1"
 
