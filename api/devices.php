@@ -23,8 +23,13 @@ $sql = "SELECT
             ts.tag_id,
             COALESCE(rb.asset_tag_number, ts.tag_id) AS asset_tag_number,
             COALESCE(dm.device_name, ts.device_name) AS asset_name,
-            COALESCE(th.location, ts.current_location) AS last_seen_location,
-            COALESCE(th.entry_time, ts.updated_at) AS last_seen_time,
+            ts.current_location AS last_seen_location,
+            COALESCE((
+                SELECT entry_time 
+                FROM tracker_history 
+                WHERE tag_id = ts.tag_id AND exit_time IS NULL 
+                ORDER BY id DESC LIMIT 1
+            ), ts.updated_at) AS last_seen_time,
             ts.current_location,
             ts.receiver,
             ts.best_rssi,
@@ -32,9 +37,7 @@ $sql = "SELECT
                 WHEN UPPER(COALESCE(ts.status, '')) = 'OFFLINE' THEN 'Offline'
                 ELSE 'Online'
             END AS status,
-            ts.updated_at,
-            th.entry_time,
-            th.exit_time
+            ts.updated_at
 
         FROM tracker_status ts
 
@@ -49,17 +52,6 @@ $sql = "SELECT
         LEFT JOIN device_mapping dm
 
         ON rb.asset_tag_number = dm.asset_tag_number
-
-        LEFT JOIN (
-            SELECT tag_id, location, entry_time, exit_time
-            FROM tracker_history
-            WHERE exit_time IS NULL
-            GROUP BY tag_id
-        ) th
-
-        ON ts.tag_id = th.tag_id
-
-        GROUP BY ts.tag_id
 
         ORDER BY asset_name";
 
@@ -119,7 +111,7 @@ while($row = mysqli_fetch_assoc($result))
     $row["asset_tag_no"] = $row["asset_tag_number"];
     $row["asset_name"] = $row["asset_name"] ?: $row["tag_id"];
 
-    // Deduplicate by unique asset: if multiple MACs map to same asset, keep newest
+    // Deduplicate by unique asset: if multiple rows map to same asset, keep newest
     $assetKey = $row["asset_tag_number"] ?: $row["tag_id"];
     if (isset($trackersByAsset[$assetKey])) {
         if (strtotime($row["updated_at"]) > strtotime($trackersByAsset[$assetKey]["updated_at"])) {

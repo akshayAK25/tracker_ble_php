@@ -117,9 +117,9 @@ mysqli_query($conn,$sql);
 $sql = "INSERT INTO locations
 (location_id, lecode, section_department, region, country, state, city, room, office_address, created_by_role)
 VALUES
-('LOC-HYD-002', 'DSTR', 'Accountant', 'South India', 'India', 'Telangana', 'Hyderabad', 'Room 402', 'Pratrika Nagar', 'Lavanya (Employee)'),
-('LOC-MUM-001', 'STRE', 'Accountant', 'West India', 'India', 'Maharashtra', 'Mumbai', 'Room 501', 'Palak', 'DigitoWork (Super Admin)'),
-('LOC-BVSP-002', 'STRE', 'Sales', 'South India', 'India', 'Telangana', 'Hyderabad', 'Room 210', 'Road No. 2, Banjara Hills', 'DigitoWork (Super Admin)')
+('LOC-HYD-002', 'DSTR', 'Accountant', 'South India', 'India', 'Telangana', 'Hyderabad', 'hall way', 'Pratrika Nagar', 'Lavanya (Employee)'),
+('LOC-MUM-001', 'STRE', 'Accountant', 'West India', 'India', 'Maharashtra', 'Mumbai', 'Pediatric OT', 'Palak', 'DigitoWork (Super Admin)'),
+('LOC-BVSP-002', 'STRE', 'Sales', 'South India', 'India', 'Telangana', 'Hyderabad', 'gastrio room', 'Road No. 2, Banjara Hills', 'DigitoWork (Super Admin)')
 ON DUPLICATE KEY UPDATE
 lecode = VALUES(lecode),
 section_department = VALUES(section_department),
