@@ -15,6 +15,17 @@ if(!isset($_GET["tagId"]))
     exit();
 }
 
+// Clean up any historical duplicate open rows in tracker_history
+@mysqli_query($conn, "
+    UPDATE tracker_history th1
+    JOIN tracker_history th2
+      ON th1.tag_id = th2.tag_id
+     AND th1.exit_time IS NULL
+     AND th2.exit_time IS NULL
+     AND th1.id < th2.id
+    SET th1.exit_time = th1.entry_time
+");
+
 $tagId = strtoupper(trim($_GET["tagId"]));
 $asset = getDisplayNameForBadge($conn, $tagId);
 
@@ -42,7 +53,7 @@ if($hasDateFilter)
             WHERE tag_id = ?
                 AND entry_time <= ?
                 AND (exit_time IS NULL OR exit_time >= ?)
-            ORDER BY entry_time DESC";
+            ORDER BY entry_time DESC, id DESC";
 
     if(
         $startAt !== "" &&
@@ -79,7 +90,7 @@ else
                 exit_time
             FROM tracker_history
             WHERE tag_id = ?
-            ORDER BY entry_time DESC";
+            ORDER BY entry_time DESC, id DESC";
 
     $stmt = mysqli_prepare($conn, $sql);
 
@@ -95,11 +106,22 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
 $history = [];
+$prevKey = null;
 
 while($row = mysqli_fetch_assoc($result))
 {
+    // Deduplicate identical consecutive history entries
+    $exitStr = $row["exit_time"] ?: "OPEN";
+    $key = $row["location"] . "|" . $row["entry_time"] . "|" . $exitStr;
+    if ($key === $prevKey) {
+        continue;
+    }
+    $prevKey = $key;
+
     $history[] = $row;
 }
+
+mysqli_stmt_close($stmt);
 
 echo json_encode([
     "success" => true,
@@ -109,7 +131,4 @@ echo json_encode([
     "data" => $history
 ]);
 
-   ?> 
-
-
-
+?>

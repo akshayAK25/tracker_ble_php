@@ -49,6 +49,17 @@ if ($resCol && mysqli_num_rows($resCol) == 0) {
     @mysqli_query($conn, $sqlCreatePending);
 }
 
+// Clean up any historical duplicate open rows in tracker_history
+@mysqli_query($conn, "
+    UPDATE tracker_history th1
+    JOIN tracker_history th2
+      ON th1.tag_id = th2.tag_id
+     AND th1.exit_time IS NULL
+     AND th2.exit_time IS NULL
+     AND th1.id < th2.id
+    SET th1.exit_time = th1.entry_time
+");
+
 // -------------------------------------------------------------
 // Parse input payload:
 // Supports:
@@ -448,7 +459,7 @@ foreach ($readings as $reading) {
         // =====================================================
         // Rule 3: Anti-Duplicate History Guard
         // =====================================================
-        if ($shouldSwitchLocation) {
+        if ($shouldSwitchLocation || $currStatus === "Offline") {
             // Check current open records in tracker_history for this tag
             $sqlOpenRows = "SELECT id, location, entry_time FROM tracker_history WHERE tag_id = ? AND exit_time IS NULL ORDER BY id DESC";
             $stmtOpen = mysqli_prepare($conn, $sqlOpenRows);

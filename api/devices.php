@@ -5,6 +5,17 @@ require_once "../includes/tracker_functions.php";
 
 header("Content-Type: application/json");
 
+// Clean up any historical duplicate open rows in tracker_history
+@mysqli_query($conn, "
+    UPDATE tracker_history th1
+    JOIN tracker_history th2
+      ON th1.tag_id = th2.tag_id
+     AND th1.exit_time IS NULL
+     AND th2.exit_time IS NULL
+     AND th1.id < th2.id
+    SET th1.exit_time = th1.entry_time
+");
+
 // Check for trackers that have gone silent
 checkOfflineTrackers($conn);
 
@@ -39,11 +50,16 @@ $sql = "SELECT
 
         ON rb.asset_tag_number = dm.asset_tag_number
 
-        LEFT JOIN tracker_history th
+        LEFT JOIN (
+            SELECT tag_id, location, entry_time, exit_time
+            FROM tracker_history
+            WHERE exit_time IS NULL
+            GROUP BY tag_id
+        ) th
 
         ON ts.tag_id = th.tag_id
 
-        AND th.exit_time IS NULL
+        GROUP BY ts.tag_id
 
         ORDER BY asset_name";
 
@@ -59,7 +75,7 @@ if(!$result)
     exit();
 }
 
-$trackers = [];
+$trackersByAsset = [];
 
 while($row = mysqli_fetch_assoc($result))
 {
@@ -96,14 +112,25 @@ while($row = mysqli_fetch_assoc($result))
                 $row["last_seen_location"] = $row["current_location"];
                 $row["last_seen_time"] = $row["updated_at"];
             }
+            mysqli_stmt_close($prevStmt);
         }
     }
 
     $row["asset_tag_no"] = $row["asset_tag_number"];
     $row["asset_name"] = $row["asset_name"] ?: $row["tag_id"];
 
-    $trackers[] = $row;
+    // Deduplicate by unique asset: if multiple MACs map to same asset, keep newest
+    $assetKey = $row["asset_tag_number"] ?: $row["tag_id"];
+    if (isset($trackersByAsset[$assetKey])) {
+        if (strtotime($row["updated_at"]) > strtotime($trackersByAsset[$assetKey]["updated_at"])) {
+            $trackersByAsset[$assetKey] = $row;
+        }
+    } else {
+        $trackersByAsset[$assetKey] = $row;
+    }
 }
+
+$trackers = array_values($trackersByAsset);
 
 echo json_encode([
     "success" => true,
