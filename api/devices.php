@@ -111,6 +111,16 @@ while($row = mysqli_fetch_assoc($result))
     $row["asset_tag_no"] = $row["asset_tag_number"];
     $row["asset_name"] = $row["asset_name"] ?: $row["tag_id"];
 
+    // Strip department prefix if present (e.g. 'Accountant - hall way' -> 'hall way')
+    if (strpos($row["last_seen_location"], " - ") !== false && stripos($row["last_seen_location"], "no signal") === false) {
+        $parts = explode(" - ", $row["last_seen_location"]);
+        $row["last_seen_location"] = trim(end($parts));
+    }
+    if (strpos($row["current_location"], " - ") !== false && stripos($row["current_location"], "no signal") === false) {
+        $parts = explode(" - ", $row["current_location"]);
+        $row["current_location"] = trim(end($parts));
+    }
+
     // Deduplicate by unique asset: if multiple rows map to same asset, keep newest
     $assetKey = $row["asset_tag_number"] ?: $row["tag_id"];
     if (isset($trackersByAsset[$assetKey])) {

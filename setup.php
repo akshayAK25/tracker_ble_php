@@ -1,44 +1,5 @@
 <?php
-mysqli_report(MYSQLI_REPORT_OFF);
-
-
-
-//  new db --------------------------------------------------------
-
-$host = "ak-mysql-25-akshaypanaganti9395-9c17.i.aivencloud.com";
-$user = "avnadmin";
-$password = getenv("DB_PASSWORD");
-$database = "defaultdb";
-$port = 15642;
-
-$conn = mysqli_init();
-
-mysqli_ssl_set(
-    $conn,
-    NULL,
-    NULL,
-    "C:/xampp/htdocs/tracker_php/certs/ca.pem",
-    NULL,
-    NULL
-);
-
-$connected = @mysqli_real_connect(
-    $conn,
-    $host,
-    $user,
-    $password,
-    $database,
-    $port,
-    NULL,
-    MYSQLI_CLIENT_SSL
-);
-
-if (!$connected) {
-    die("Connection failed: " . mysqli_connect_error());
-}
-
-
-// echo "Connected Successfully";
+include "config/db.php";
 
 
 
@@ -231,6 +192,6 @@ $sql = "CREATE TABLE IF NOT EXISTS tracker_pending (
 )";
 mysqli_query($conn, $sql);
 
-// echo "Setup Completed";
+echo "<h2 style='color:green;'>Setup Completed Successfully!</h2><p>Database schema and location names have been updated.</p>";
 
 ?>

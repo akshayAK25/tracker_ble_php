@@ -110,6 +110,12 @@ $prevKey = null;
 
 while($row = mysqli_fetch_assoc($result))
 {
+    // Strip department prefix if present (e.g. 'Accountant - hall way' -> 'hall way')
+    if (strpos($row["location"], " - ") !== false && stripos($row["location"], "no signal") === false) {
+        $parts = explode(" - ", $row["location"]);
+        $row["location"] = trim(end($parts));
+    }
+
     // Deduplicate identical consecutive history entries
     $exitStr = $row["exit_time"] ?: "OPEN";
     $key = $row["location"] . "|" . $row["entry_time"] . "|" . $exitStr;
