@@ -32,15 +32,22 @@ if (!$data) {
 }
 
 // -------------------------------------------------------------
-// Ensure tracker_pending table exists for debounce confirmations
+// Ensure tracker_pending table exists with first_seen dwell tracking
 // -------------------------------------------------------------
 $sqlCreatePending = "CREATE TABLE IF NOT EXISTS tracker_pending (
     tag_id VARCHAR(20) PRIMARY KEY,
     candidate_receiver VARCHAR(20) NOT NULL,
-    candidate_count INT NOT NULL DEFAULT 1,
+    first_seen DATETIME NOT NULL,
     updated_at DATETIME NOT NULL
 )";
 @mysqli_query($conn, $sqlCreatePending);
+
+// Ensure first_seen column exists if table was created with older schema
+$resCol = @mysqli_query($conn, "SHOW COLUMNS FROM tracker_pending LIKE 'first_seen'");
+if ($resCol && mysqli_num_rows($resCol) == 0) {
+    @mysqli_query($conn, "DROP TABLE IF EXISTS tracker_pending");
+    @mysqli_query($conn, $sqlCreatePending);
+}
 
 // -------------------------------------------------------------
 // Parse input payload:
@@ -252,30 +259,45 @@ foreach ($readings as $reading) {
             mysqli_stmt_close($stmt);
         }
 
-        // Insert first history record
-        $sqlInsertHist = "INSERT INTO tracker_history
-        (
-            tag_id,
-            device_name,
-            location,
-            receiver,
-            entry_time,
-            exit_time
-        )
-        VALUES (?, ?, ?, ?, ?, NULL)";
-        $stmt = mysqli_prepare($conn, $sqlInsertHist);
-        if ($stmt) {
-            mysqli_stmt_bind_param(
-                $stmt,
-                "sssss",
-                $tagId,
-                $deviceName,
-                $confirmedLocation,
-                $confirmedReceiver,
-                $currentTime
-            );
-            mysqli_stmt_execute($stmt);
-            mysqli_stmt_close($stmt);
+        // Insert first history record (guarded against duplicates)
+        $sqlCheckOpen = "SELECT id FROM tracker_history WHERE tag_id = ? AND exit_time IS NULL LIMIT 1";
+        $stmtCheck = mysqli_prepare($conn, $sqlCheckOpen);
+        $hasOpen = false;
+        if ($stmtCheck) {
+            mysqli_stmt_bind_param($stmtCheck, "s", $tagId);
+            mysqli_stmt_execute($stmtCheck);
+            $resOpen = mysqli_stmt_get_result($stmtCheck);
+            if (mysqli_fetch_assoc($resOpen)) {
+                $hasOpen = true;
+            }
+            mysqli_stmt_close($stmtCheck);
+        }
+
+        if (!$hasOpen) {
+            $sqlInsertHist = "INSERT INTO tracker_history
+            (
+                tag_id,
+                device_name,
+                location,
+                receiver,
+                entry_time,
+                exit_time
+            )
+            VALUES (?, ?, ?, ?, ?, NULL)";
+            $stmt = mysqli_prepare($conn, $sqlInsertHist);
+            if ($stmt) {
+                mysqli_stmt_bind_param(
+                    $stmt,
+                    "sssss",
+                    $tagId,
+                    $deviceName,
+                    $confirmedLocation,
+                    $confirmedReceiver,
+                    $currentTime
+                );
+                mysqli_stmt_execute($stmt);
+                mysqli_stmt_close($stmt);
+            }
         }
 
         $actionTaken = "created";
@@ -299,7 +321,7 @@ foreach ($readings as $reading) {
             $targetReceiver = $currReceiver;
             $targetRssi = $topRssi;
 
-            // Clear any pending switch
+            // Clear any pending candidate since current receiver is winning
             $sqlClearPending = "DELETE FROM tracker_pending WHERE tag_id = ?";
             $stmt = mysqli_prepare($conn, $sqlClearPending);
             if ($stmt) {
@@ -310,13 +332,13 @@ foreach ($readings as $reading) {
         }
         // Subcase B2: A different antenna ($topReceiver) has the highest RSSI
         else {
-            // Rule 1: 6 dB Hysteresis Margin
-            // The candidate must beat the current receiver by at least 6 dB.
-            // If the current receiver hasn't reported in 20s ($currRssi === null), margin is waived.
-            $beatsByMargin = ($currRssi === null) || ($topRssi >= ($currRssi + 6));
+            // Rule 1: 8 dB Hysteresis Margin
+            // The candidate must beat the current receiver by at least 8 dBm.
+            // If the current receiver has timed out (> 20s silent), the margin is waived.
+            $beatsByMargin = ($currRssi === null) || ($topRssi >= ($currRssi + 8));
 
             if (!$beatsByMargin) {
-                // Not strong enough to overcome the 6 dB margin. Stay on current receiver.
+                // Not strong enough to overcome the 8 dB margin. Stay on current receiver.
                 $targetReceiver = $currReceiver;
                 $targetRssi = ($currRssi !== null) ? $currRssi : $topRssi;
 
@@ -329,9 +351,9 @@ foreach ($readings as $reading) {
                     mysqli_stmt_close($stmt);
                 }
             } else {
-                // Rule 2: 2-Scan Confirmation (Debounce)
-                // Check if this candidate already won on the previous scan within the last 8 seconds.
-                $sqlCheckPending = "SELECT candidate_receiver, candidate_count, updated_at
+                // Rule 2: 5-Second Sustained Dwell Time
+                // The candidate must sustain the lead continuously for >= 5 seconds.
+                $sqlCheckPending = "SELECT candidate_receiver, first_seen, updated_at
                     FROM tracker_pending
                     WHERE tag_id = ?";
                 $stmt = mysqli_prepare($conn, $sqlCheckPending);
@@ -345,12 +367,52 @@ foreach ($readings as $reading) {
                 }
 
                 $isConfirmed = false;
+                $currentTimestamp = strtotime($currentTime);
+
                 if ($pending && $pending["candidate_receiver"] === $topReceiver) {
-                    // Check if last scan was within 8 seconds
-                    $pendingAge = strtotime($currentTime) - strtotime($pending["updated_at"]);
-                    if ($pendingAge <= 8) {
-                        // Confirmed! (2 consecutive scans)
-                        $isConfirmed = true;
+                    $firstSeenTime = strtotime($pending["first_seen"]);
+                    $lastUpdateTime = strtotime($pending["updated_at"]);
+                    $gapSinceLastPacket = $currentTimestamp - $lastUpdateTime;
+
+                    // If gap is <= 6 seconds, this candidate held the lead continuously
+                    if ($gapSinceLastPacket <= 6) {
+                        $totalDwellDuration = $currentTimestamp - $firstSeenTime;
+                        if ($totalDwellDuration >= 5) {
+                            // Sustained for at least 5 seconds! CONFIRMED!
+                            $isConfirmed = true;
+                        } else {
+                            // Still within the 5-second dwell window: update timestamp
+                            $sqlUpdatePending = "UPDATE tracker_pending SET updated_at = ? WHERE tag_id = ?";
+                            $stmtUpd = mysqli_prepare($conn, $sqlUpdatePending);
+                            if ($stmtUpd) {
+                                mysqli_stmt_bind_param($stmtUpd, "ss", $currentTime, $tagId);
+                                mysqli_stmt_execute($stmtUpd);
+                                mysqli_stmt_close($stmtUpd);
+                            }
+                        }
+                    } else {
+                        // Candidate went silent for > 6 seconds; reset dwell timer
+                        $sqlResetPending = "UPDATE tracker_pending SET first_seen = ?, updated_at = ? WHERE tag_id = ?";
+                        $stmtReset = mysqli_prepare($conn, $sqlResetPending);
+                        if ($stmtReset) {
+                            mysqli_stmt_bind_param($stmtReset, "sss", $currentTime, $currentTime, $tagId);
+                            mysqli_stmt_execute($stmtReset);
+                            mysqli_stmt_close($stmtReset);
+                        }
+                    }
+                } else {
+                    // Start fresh 5-second dwell timer for this candidate
+                    $sqlInsertPending = "INSERT INTO tracker_pending (tag_id, candidate_receiver, first_seen, updated_at)
+                        VALUES (?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE
+                        candidate_receiver = VALUES(candidate_receiver),
+                        first_seen = VALUES(first_seen),
+                        updated_at = VALUES(updated_at)";
+                    $stmtIns = mysqli_prepare($conn, $sqlInsertPending);
+                    if ($stmtIns) {
+                        mysqli_stmt_bind_param($stmtIns, "ssss", $tagId, $topReceiver, $currentTime, $currentTime);
+                        mysqli_stmt_execute($stmtIns);
+                        mysqli_stmt_close($stmtIns);
                     }
                 }
 
@@ -361,7 +423,7 @@ foreach ($readings as $reading) {
                     $targetLocation = getAntennaLocation($conn, $targetReceiver);
                     $shouldSwitchLocation = true;
 
-                    // Clear pending table
+                    // Clear pending table once confirmed
                     $sqlClearPending = "DELETE FROM tracker_pending WHERE tag_id = ?";
                     $stmt = mysqli_prepare($conn, $sqlClearPending);
                     if ($stmt) {
@@ -370,21 +432,7 @@ foreach ($readings as $reading) {
                         mysqli_stmt_close($stmt);
                     }
                 } else {
-                    // Scan 1 of 2: Record candidate in tracker_pending, do NOT switch location yet
-                    $sqlSetPending = "INSERT INTO tracker_pending (tag_id, candidate_receiver, candidate_count, updated_at)
-                        VALUES (?, ?, 1, ?)
-                        ON DUPLICATE KEY UPDATE
-                        candidate_receiver = VALUES(candidate_receiver),
-                        candidate_count = 1,
-                        updated_at = VALUES(updated_at)";
-                    $stmt = mysqli_prepare($conn, $sqlSetPending);
-                    if ($stmt) {
-                        mysqli_stmt_bind_param($stmt, "sss", $tagId, $topReceiver, $currentTime);
-                        mysqli_stmt_execute($stmt);
-                        mysqli_stmt_close($stmt);
-                    }
-
-                    // Keep current receiver and location for this scan
+                    // Dwell duration (< 5s) not yet reached: hold current location
                     $targetReceiver = $currReceiver;
                     $targetLocation = $currLocation;
                     $targetRssi = ($currRssi !== null) ? $currRssi : $topRssi;
@@ -397,46 +445,96 @@ foreach ($readings as $reading) {
         $confirmedRssi = $targetRssi;
         $signalStatus = getSignalStatus($confirmedRssi);
 
-        // Rule 3: Location Transition & Prevent Same-Location Spam
-        // Only insert into tracker_history if location actually changed or returning from Offline
+        // =====================================================
+        // Rule 3: Anti-Duplicate History Guard
+        // =====================================================
         if ($shouldSwitchLocation) {
-            if ($currLocation !== $confirmedLocation || $currStatus === "Offline") {
-                // Close previous open history record
-                $sqlUpdateHist = "UPDATE tracker_history
-                    SET exit_time = ?
-                    WHERE tag_id = ?
-                    AND exit_time IS NULL";
-                $stmt = mysqli_prepare($conn, $sqlUpdateHist);
-                if ($stmt) {
-                    mysqli_stmt_bind_param($stmt, "ss", $currentTime, $tagId);
-                    mysqli_stmt_execute($stmt);
-                    mysqli_stmt_close($stmt);
+            // Check current open records in tracker_history for this tag
+            $sqlOpenRows = "SELECT id, location, entry_time FROM tracker_history WHERE tag_id = ? AND exit_time IS NULL ORDER BY id DESC";
+            $stmtOpen = mysqli_prepare($conn, $sqlOpenRows);
+            $openRows = [];
+            if ($stmtOpen) {
+                mysqli_stmt_bind_param($stmtOpen, "s", $tagId);
+                mysqli_stmt_execute($stmtOpen);
+                $resOpen = mysqli_stmt_get_result($stmtOpen);
+                while ($r = mysqli_fetch_assoc($resOpen)) {
+                    $openRows[] = $r;
+                }
+                mysqli_stmt_close($stmtOpen);
+            }
+
+            $alreadyOpenInTargetLocation = false;
+            foreach ($openRows as $idx => $openRow) {
+                if ($openRow["location"] === $confirmedLocation && !$alreadyOpenInTargetLocation) {
+                    // Already open in this exact target location!
+                    $alreadyOpenInTargetLocation = true;
+                } else {
+                    // Close this record (different location or duplicate open record)
+                    $sqlClose = "UPDATE tracker_history SET exit_time = ? WHERE id = ?";
+                    $stmtClose = mysqli_prepare($conn, $sqlClose);
+                    if ($stmtClose) {
+                        mysqli_stmt_bind_param($stmtClose, "si", $currentTime, $openRow["id"]);
+                        mysqli_stmt_execute($stmtClose);
+                        mysqli_stmt_close($stmtClose);
+                    }
+                }
+            }
+
+            // Only insert a new history record if NOT already open in this location
+            if (!$alreadyOpenInTargetLocation) {
+                // Check if the most recently closed record was for the SAME location within 5s
+                $sqlLastClosed = "SELECT id, location, exit_time FROM tracker_history WHERE tag_id = ? ORDER BY id DESC LIMIT 1";
+                $stmtLast = mysqli_prepare($conn, $sqlLastClosed);
+                $lastClosed = null;
+                if ($stmtLast) {
+                    mysqli_stmt_bind_param($stmtLast, "s", $tagId);
+                    mysqli_stmt_execute($stmtLast);
+                    $resLast = mysqli_stmt_get_result($stmtLast);
+                    $lastClosed = mysqli_fetch_assoc($resLast);
+                    mysqli_stmt_close($stmtLast);
                 }
 
-                // Insert new history record for the new location
-                $sqlInsertHist = "INSERT INTO tracker_history
-                (
-                    tag_id,
-                    device_name,
-                    location,
-                    receiver,
-                    entry_time,
-                    exit_time
-                )
-                VALUES (?, ?, ?, ?, ?, NULL)";
-                $stmt = mysqli_prepare($conn, $sqlInsertHist);
-                if ($stmt) {
-                    mysqli_stmt_bind_param(
-                        $stmt,
-                        "sssss",
-                        $tagId,
-                        $deviceName,
-                        $confirmedLocation,
-                        $confirmedReceiver,
-                        $currentTime
-                    );
-                    mysqli_stmt_execute($stmt);
-                    mysqli_stmt_close($stmt);
+                $canReopen = false;
+                if ($lastClosed && $lastClosed["location"] === $confirmedLocation && !empty($lastClosed["exit_time"])) {
+                    $secondsSinceExit = strtotime($currentTime) - strtotime($lastClosed["exit_time"]);
+                    if ($secondsSinceExit <= 5) {
+                        // Re-open previous row instead of creating duplicate back-to-back row
+                        $sqlReopen = "UPDATE tracker_history SET exit_time = NULL WHERE id = ?";
+                        $stmtReopen = mysqli_prepare($conn, $sqlReopen);
+                        if ($stmtReopen) {
+                            mysqli_stmt_bind_param($stmtReopen, "i", $lastClosed["id"]);
+                            mysqli_stmt_execute($stmtReopen);
+                            mysqli_stmt_close($stmtReopen);
+                            $canReopen = true;
+                        }
+                    }
+                }
+
+                if (!$canReopen) {
+                    $sqlInsertHist = "INSERT INTO tracker_history
+                    (
+                        tag_id,
+                        device_name,
+                        location,
+                        receiver,
+                        entry_time,
+                        exit_time
+                    )
+                    VALUES (?, ?, ?, ?, ?, NULL)";
+                    $stmt = mysqli_prepare($conn, $sqlInsertHist);
+                    if ($stmt) {
+                        mysqli_stmt_bind_param(
+                            $stmt,
+                            "sssss",
+                            $tagId,
+                            $deviceName,
+                            $confirmedLocation,
+                            $confirmedReceiver,
+                            $currentTime
+                        );
+                        mysqli_stmt_execute($stmt);
+                        mysqli_stmt_close($stmt);
+                    }
                 }
             }
         }

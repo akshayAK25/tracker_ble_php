@@ -222,7 +222,7 @@ mysqli_query($conn, $sql);
 $sql = "CREATE TABLE IF NOT EXISTS tracker_pending (
     tag_id VARCHAR(20) PRIMARY KEY,
     candidate_receiver VARCHAR(20) NOT NULL,
-    candidate_count INT NOT NULL DEFAULT 1,
+    first_seen DATETIME NOT NULL,
     updated_at DATETIME NOT NULL
 )";
 mysqli_query($conn, $sql);
