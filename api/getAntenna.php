@@ -9,11 +9,11 @@ $sql = "SELECT
             am.antenna_id,
             am.location_id,
             CASE
-                WHEN l.location_id IS NOT NULL THEN CONCAT_WS(' - ', l.section_department, l.room)
+                WHEN l.location_id IS NOT NULL THEN l.room
                 ELSE NULL
             END AS location_name,
             CASE
-                WHEN l.location_id IS NOT NULL THEN CONCAT_WS(' - ', l.section_department, l.room)
+                WHEN l.location_id IS NOT NULL THEN l.room
                 ELSE NULL
             END AS location,
             l.lecode,

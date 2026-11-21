@@ -116,7 +116,7 @@ $currentTime = date("Y-m-d H:i:s");
 function getAntennaLocation($conn, $antennaId) {
     $sql = "SELECT
         am.location_id,
-        CONCAT_WS(' - ', l.section_department, l.room) AS location
+        l.room AS location
     FROM antenna_mapping am
     LEFT JOIN locations l
         ON am.location_id = l.location_id

@@ -190,7 +190,7 @@ $sql = "UPDATE tracker_status ts
             ON ts.receiver = am.antenna_id
         INNER JOIN locations l
             ON am.location_id = l.location_id
-        SET ts.current_location = CONCAT(l.section_department, ' - ', l.room)";
+        SET ts.current_location = l.room";
 mysqli_query($conn,$sql);
 
 $sql = "UPDATE tracker_history th
@@ -198,8 +198,12 @@ $sql = "UPDATE tracker_history th
             ON th.receiver = am.antenna_id
         INNER JOIN locations l
             ON am.location_id = l.location_id
-        SET th.location = CONCAT(l.section_department, ' - ', l.room)";
+        SET th.location = l.room";
 mysqli_query($conn,$sql);
+
+// Clean up any lingering 'Accountant - ' or 'Sales - ' prefixes from historical entries
+mysqli_query($conn, "UPDATE tracker_status SET current_location = SUBSTRING_INDEX(current_location, ' - ', -1) WHERE current_location LIKE '% - %' AND current_location NOT LIKE 'No Signal'");
+mysqli_query($conn, "UPDATE tracker_history SET location = SUBSTRING_INDEX(location, ' - ', -1) WHERE location LIKE '% - %' AND location NOT LIKE 'No Signal'");
 
 
 $sql = "CREATE TABLE IF NOT EXISTS tracker_readings

@@ -16,8 +16,8 @@ $sql = "SELECT
             room,
             office_address,
             created_by_role,
-            CONCAT(section_department, ' - ', room) AS location_name,
-            CONCAT(section_department, ' - ', room) AS location
+            room AS location_name,
+            room AS location
         FROM locations
         ORDER BY location_id";
 
